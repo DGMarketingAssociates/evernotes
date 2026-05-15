@@ -1,0 +1,1248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notebook Vault</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --panel-2: #fafbfd;
+    --border: #e3e6ec;
+    --text: #1c2028;
+    --muted: #6b7280;
+    --accent: #2b6cb0;
+    --accent-hover: #2358a0;
+    --danger: #c0392b;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 12px rgba(0,0,0,0.04);
+    --radius: 8px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161821;
+      --panel: #1e212d;
+      --panel-2: #252936;
+      --border: #2e3342;
+      --text: #e6e8ee;
+      --muted: #9aa3b2;
+      --accent: #6aa6ff;
+      --accent-hover: #8ebdff;
+      --danger: #ff6b6b;
+      --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.3);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, select, textarea {
+    font-family: inherit;
+    font-size: inherit;
+    color: inherit;
+  }
+  button {
+    cursor: pointer;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 7px 12px;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  button:hover { background: var(--panel-2); border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button.danger { color: var(--danger); }
+  button.danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+  input[type="text"], input[type="password"], input[type="search"], textarea, select {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color 0.1s, box-shadow 0.1s;
+  }
+  input:focus, textarea:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(43, 108, 176, 0.15);
+  }
+  textarea { resize: vertical; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+
+  /* ---------- Lock screen ---------- */
+  .lock-overlay {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    z-index: 100;
+  }
+  .lock-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    padding: 32px;
+    width: 100%;
+    max-width: 420px;
+  }
+  .lock-card h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .lock-card .sub {
+    margin: 0 0 20px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .lock-card form { display: flex; flex-direction: column; gap: 12px; }
+  .lock-card label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+  .lock-card .err { color: var(--danger); font-size: 13px; min-height: 18px; }
+  .lock-card .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .lock-card .actions .spacer { flex: 1; }
+  .lock-card .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+  /* ---------- Main layout ---------- */
+  #app { display: none; height: 100vh; flex-direction: column; }
+  header.topbar {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .brand {
+    font-weight: 600;
+    margin-right: 8px;
+    display: flex; align-items: center; gap: 6px;
+    white-space: nowrap;
+  }
+  .brand .lock-dot { width: 8px; height: 8px; background: #2ecc71; border-radius: 50%; }
+  .search-wrap { flex: 1; min-width: 200px; position: relative; }
+  .search-wrap input { width: 100%; padding-left: 32px; }
+  .search-wrap .icon {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); pointer-events: none;
+  }
+  .topbar select { padding: 7px 10px; }
+  .topbar .count { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+  main.layout {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(260px, 360px) 1fr;
+    overflow: hidden;
+  }
+
+  /* Note list */
+  .list-pane {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+  }
+  .note-row {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .note-row:hover { background: var(--panel-2); }
+  .note-row.active { background: var(--panel-2); border-left: 3px solid var(--accent); padding-left: 11px; }
+  .note-row .title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .note-row .meta { font-size: 11px; color: var(--muted); display: flex; gap: 8px; }
+  .note-row .preview { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .empty-list { padding: 40px 16px; text-align: center; color: var(--muted); }
+
+  /* Detail / editor pane */
+  .detail-pane {
+    background: var(--bg);
+    overflow-y: auto;
+    padding: 24px 28px;
+  }
+  .detail-empty { color: var(--muted); text-align: center; margin-top: 80px; }
+  .detail-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px 22px;
+    max-width: 820px;
+    margin: 0 auto;
+  }
+  .detail-card h2 { margin: 0 0 6px; word-break: break-word; }
+  .detail-card .meta-row { color: var(--muted); font-size: 12px; margin-bottom: 18px; }
+  .detail-card .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .detail-card pre.content {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  /* In rendered content, blur things that look like passwords until hovered */
+  .detail-card pre.content .pw {
+    background: var(--text);
+    color: var(--text);
+    border-radius: 3px;
+    padding: 0 2px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .detail-card pre.content .pw.revealed,
+  .detail-card pre.content .pw:hover {
+    background: transparent;
+    color: inherit;
+    outline: 1px dashed var(--accent);
+  }
+  .editor input.title-input { font-size: 18px; font-weight: 600; width: 100%; margin-bottom: 10px; }
+  .editor textarea.content-input { width: 100%; min-height: 320px; }
+
+  mark { background: rgba(255, 230, 0, 0.55); color: inherit; padding: 0 2px; border-radius: 2px; }
+  @media (prefers-color-scheme: dark) {
+    mark { background: rgba(255, 215, 0, 0.35); }
+  }
+
+  /* Menu dropdown */
+  .menu-wrap { position: relative; }
+  .menu-pop {
+    position: absolute; top: calc(100% + 4px); right: 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    min-width: 200px;
+    z-index: 50;
+    overflow: hidden;
+    display: none;
+  }
+  .menu-pop.open { display: block; }
+  .menu-pop button {
+    width: 100%;
+    text-align: left;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    padding: 9px 14px;
+  }
+  .menu-pop button:hover { background: var(--panel-2); }
+  .menu-pop .divider { height: 1px; background: var(--border); margin: 2px 0; }
+
+  /* Mobile */
+  @media (max-width: 760px) {
+    main.layout { grid-template-columns: 1fr; }
+    .list-pane { display: block; }
+    .list-pane.hidden { display: none; }
+    .detail-pane.hidden { display: none; }
+  }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--text); color: var(--bg);
+    padding: 10px 16px; border-radius: 999px;
+    font-size: 13px;
+    opacity: 0; transition: opacity 0.2s;
+    pointer-events: none;
+    z-index: 200;
+  }
+  .toast.show { opacity: 0.95; }
+
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4);
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 150;
+    padding: 16px;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--panel);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    max-width: 420px;
+    width: 100%;
+    padding: 22px;
+  }
+  .modal h3 { margin: 0 0 12px; }
+  .modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .modal label { font-size: 12px; color: var(--muted); display: block; margin: 8px 0 4px; }
+  .modal input { width: 100%; }
+
+  .back-btn { display: none; }
+  @media (max-width: 760px) {
+    .back-btn { display: inline-flex; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Bootstrap notes: replaced by the build script with the actual JSON.
+     If left as the marker, the app treats it as "no bootstrap data". -->
+<script id="bootstrap-data" type="application/json">__BOOTSTRAP_PLACEHOLDER__</script>
+
+<!-- ============================ Lock / Setup screen ============================ -->
+<div id="lock" class="lock-overlay">
+  <div class="lock-card">
+    <h1 id="lock-title">Unlock your notebook</h1>
+    <p class="sub" id="lock-sub">Enter your master password to decrypt your notes.</p>
+    <form id="lock-form" autocomplete="off">
+      <div>
+        <label for="pw1">Master password</label>
+        <input type="password" id="pw1" autocomplete="current-password" required autofocus>
+      </div>
+      <div id="pw2-wrap" style="display:none">
+        <label for="pw2">Confirm password</label>
+        <input type="password" id="pw2" autocomplete="new-password">
+        <div class="hint">Pick something you'll remember &mdash; if you lose it your notes cannot be recovered.</div>
+      </div>
+      <div class="err" id="lock-err"></div>
+      <div class="actions">
+        <button type="submit" class="primary" id="lock-submit">Unlock</button>
+        <span class="spacer"></span>
+        <button type="button" id="lock-import">Restore from backup&hellip;</button>
+      </div>
+      <div class="hint" id="forgot-wrap" style="margin-top:4px;text-align:right">
+        <a href="#" id="lock-forgot" style="color:var(--accent);text-decoration:none">Forgot password?</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Reset-vault modal -->
+<div class="modal-backdrop" id="reset-modal">
+  <div class="modal">
+    <h3>Reset vault</h3>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 12px">
+      This will erase your encrypted vault from this browser and restart from the original
+      <b id="reset-count">2,071</b> notes bundled in this HTML file. Any notes added or edits
+      made after first setup will be lost. To confirm, type your recovery email:
+    </p>
+    <label for="reset-email">Recovery email</label>
+    <input type="email" id="reset-email" autocomplete="off" placeholder="you@example.com">
+    <div class="err" id="reset-err" style="margin-top:8px;color:var(--danger);font-size:13px;min-height:18px;"></div>
+    <div class="actions">
+      <button id="reset-cancel">Cancel</button>
+      <button id="reset-confirm" class="danger">Reset vault</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ Main app ============================ -->
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><span class="lock-dot"></span> Notebook Vault</div>
+    <div class="search-wrap">
+      <span class="icon">&#128269;</span>
+      <input type="search" id="search" placeholder="Search title or content (e.g. 'godaddy', 'zoho')&hellip;">
+    </div>
+    <select id="sort" title="Sort order">
+      <option value="updated_desc">Last updated &darr;</option>
+      <option value="updated_asc">Last updated &uarr;</option>
+      <option value="title_asc">Title A &rarr; Z</option>
+      <option value="title_desc">Title Z &rarr; A</option>
+      <option value="created_desc">Date created &darr;</option>
+      <option value="created_asc">Date created &uarr;</option>
+    </select>
+    <span class="count" id="count"></span>
+    <button class="primary" id="new-note">+ New</button>
+    <div class="menu-wrap">
+      <button id="menu-btn">&#9776;</button>
+      <div class="menu-pop" id="menu-pop">
+        <button id="menu-export">Export encrypted backup</button>
+        <button id="menu-import">Import backup&hellip;</button>
+        <div class="divider"></div>
+        <button id="menu-import-html">Import Evernote HTML&hellip;</button>
+        <div class="divider"></div>
+        <button id="menu-change-pw">Change master password&hellip;</button>
+        <div class="divider"></div>
+        <button id="menu-lock">Lock vault</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="list-pane" id="list-pane"></aside>
+    <section class="detail-pane" id="detail-pane">
+      <div class="detail-empty">Select a note from the list.</div>
+    </section>
+  </main>
+</div>
+
+<!-- Change-password modal -->
+<div class="modal-backdrop" id="change-pw-modal">
+  <div class="modal">
+    <h3>Change master password</h3>
+    <label for="cp-old">Current password</label>
+    <input type="password" id="cp-old">
+    <label for="cp-new1">New password</label>
+    <input type="password" id="cp-new1">
+    <label for="cp-new2">Confirm new password</label>
+    <input type="password" id="cp-new2">
+    <div class="err" id="cp-err" style="margin-top:8px;color:var(--danger);font-size:13px;min-height:18px;"></div>
+    <div class="actions">
+      <button id="cp-cancel">Cancel</button>
+      <button id="cp-save" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- File-input hidden (re-used for both backup imports and Evernote HTML imports) -->
+<input type="file" id="file-input" style="display:none">
+<input type="file" id="html-file-input" accept=".html,.htm,text/html" multiple style="display:none">
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+// ============================================================================
+// Crypto helpers (AES-GCM via Web Crypto API; PBKDF2 key derivation)
+// ============================================================================
+
+const PBKDF2_ITERS = 250000;
+const SALT_LEN = 16;
+const IV_LEN = 12;
+
+function bytesToB64(bytes) {
+  let s = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+  }
+  return btoa(s);
+}
+function b64ToBytes(b64) {
+  const s = atob(b64);
+  const bytes = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+  return bytes;
+}
+function randBytes(n) {
+  const a = new Uint8Array(n);
+  crypto.getRandomValues(a);
+  return a;
+}
+
+async function deriveKey(password, salt) {
+  const enc = new TextEncoder();
+  const baseKey = await crypto.subtle.importKey(
+    "raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: PBKDF2_ITERS, hash: "SHA-256" },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+async function encryptPayload(plainObj, password) {
+  const salt = randBytes(SALT_LEN);
+  const iv = randBytes(IV_LEN);
+  const key = await deriveKey(password, salt);
+  const plain = new TextEncoder().encode(JSON.stringify(plainObj));
+  const cipher = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plain)
+  );
+  return {
+    v: 1,
+    alg: "AES-GCM-256/PBKDF2-SHA256",
+    iters: PBKDF2_ITERS,
+    salt: bytesToB64(salt),
+    iv: bytesToB64(iv),
+    ct: bytesToB64(cipher),
+  };
+}
+
+async function decryptPayload(payload, password) {
+  const salt = b64ToBytes(payload.salt);
+  const iv = b64ToBytes(payload.iv);
+  const ct = b64ToBytes(payload.ct);
+  const iters = payload.iters || PBKDF2_ITERS;
+  const enc = new TextEncoder();
+  const baseKey = await crypto.subtle.importKey(
+    "raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveKey"]
+  );
+  const key = await crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: iters, hash: "SHA-256" },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+// ============================================================================
+// Storage
+// ============================================================================
+
+const LS_KEY = "notebook-vault.v4";
+const RECOVERY_EMAIL = "sergio@melicio.com";
+// Best-effort cleanup of older blobs so they don't sit orphaned.
+try { localStorage.removeItem("notebook-vault.v1"); } catch (_) {}
+try { localStorage.removeItem("notebook-vault.v2"); } catch (_) {}
+try { localStorage.removeItem("notebook-vault.v3"); } catch (_) {}
+
+function loadEncrypted() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) { return null; }
+}
+function saveEncrypted(payload) {
+  localStorage.setItem(LS_KEY, JSON.stringify(payload));
+}
+function clearEncrypted() { localStorage.removeItem(LS_KEY); }
+
+// ============================================================================
+// App state
+// ============================================================================
+
+const state = {
+  password: null,        // held in memory while unlocked
+  notes: [],             // [{id, title, content, created, updated}]
+  selectedId: null,
+  editing: false,
+  sort: "updated_desc",
+  query: "",
+};
+
+// ============================================================================
+// Utilities
+// ============================================================================
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+function showToast(msg, ms = 1800) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => t.classList.remove("show"), ms);
+}
+
+function fmtDate(s) {
+  if (!s) return "";
+  const d = new Date(s);
+  if (isNaN(d)) return s;
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  const opts = sameYear
+    ? { month: "short", day: "numeric" }
+    : { year: "numeric", month: "short", day: "numeric" };
+  return d.toLocaleDateString(undefined, opts);
+}
+function fmtDateLong(s) {
+  if (!s) return "";
+  const d = new Date(s);
+  if (isNaN(d)) return s;
+  return d.toLocaleString();
+}
+
+function nowIso() { return new Date().toISOString(); }
+
+function newId() {
+  return "n" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function highlight(text, query) {
+  if (!query) return escapeHtml(text);
+  const safe = escapeHtml(text);
+  const q = query.trim();
+  if (!q) return safe;
+  try {
+    const re = new RegExp("(" + q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi");
+    return safe.replace(re, "<mark>$1</mark>");
+  } catch { return safe; }
+}
+
+// Heuristic: words that look like passwords (mixed-case+digit or contain special char,
+// length >= 6, no spaces). Wrap them in <span class="pw"> for blur-to-reveal.
+function maskPasswords(htmlEscaped) {
+  // Split on whitespace and rebuild so we keep the original spacing.
+  return htmlEscaped.replace(/(^|[\s>])([^\s<]{6,40})(?=[\s<]|$)/g, (m, pre, word) => {
+    // Skip if the token looks like an email, URL, or pure word
+    if (/^https?:\/\//i.test(word)) return m;
+    if (/^[A-Za-z]+@[A-Za-z0-9.-]+$/.test(word)) return m;
+    if (/^[A-Za-z]+$/.test(word)) return m;             // all letters: not a pw
+    if (/^\d+$/.test(word)) return m;                   // all digits: probably a phone number
+    if (/<mark>|<\/mark>/.test(word)) return m;
+    // Looks "password-y" if it has at least 2 of: lower, upper, digit, special
+    const hasL = /[a-z]/.test(word), hasU = /[A-Z]/.test(word);
+    const hasD = /\d/.test(word), hasS = /[^A-Za-z0-9]/.test(word);
+    const variety = hasL + hasU + hasD + hasS;
+    if (variety >= 2 && (hasD || hasS)) {
+      return pre + '<span class="pw" title="Click to reveal">' + word + "</span>";
+    }
+    return m;
+  });
+}
+
+// ============================================================================
+// Filtering & sorting
+// ============================================================================
+
+function getFiltered() {
+  const q = state.query.trim().toLowerCase();
+  let arr = state.notes;
+  if (q) {
+    arr = arr.filter(n =>
+      (n.title || "").toLowerCase().includes(q) ||
+      (n.content || "").toLowerCase().includes(q)
+    );
+  }
+  const sortKey = state.sort;
+  const cmpStr = (a, b) => (a || "").localeCompare(b || "", undefined, { sensitivity: "base" });
+  const cmpDate = (a, b) => (a || "").localeCompare(b || "");
+  arr = arr.slice();
+  switch (sortKey) {
+    case "title_asc":      arr.sort((a, b) => cmpStr(a.title, b.title)); break;
+    case "title_desc":     arr.sort((a, b) => cmpStr(b.title, a.title)); break;
+    case "updated_asc":    arr.sort((a, b) => cmpDate(a.updated, b.updated)); break;
+    case "updated_desc":   arr.sort((a, b) => cmpDate(b.updated, a.updated)); break;
+    case "created_asc":    arr.sort((a, b) => cmpDate(a.created, b.created)); break;
+    case "created_desc":   arr.sort((a, b) => cmpDate(b.created, a.created)); break;
+  }
+  return arr;
+}
+
+// ============================================================================
+// Rendering
+// ============================================================================
+
+function renderList() {
+  const pane = $("#list-pane");
+  const items = getFiltered();
+  $("#count").textContent = items.length + " / " + state.notes.length;
+  if (items.length === 0) {
+    pane.innerHTML = '<div class="empty-list">No notes match.</div>';
+    return;
+  }
+  const q = state.query;
+  const html = items.map(n => {
+    const active = n.id === state.selectedId ? " active" : "";
+    const preview = (n.content || "").replace(/\s+/g, " ").slice(0, 120);
+    return (
+      '<div class="note-row' + active + '" data-id="' + n.id + '">' +
+        '<div class="title">' + highlight(n.title || "(untitled)", q) + '</div>' +
+        '<div class="preview">' + highlight(preview, q) + '</div>' +
+        '<div class="meta">' +
+          '<span>Updated ' + fmtDate(n.updated) + '</span>' +
+          '<span>&middot; Created ' + fmtDate(n.created) + '</span>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join("");
+  pane.innerHTML = html;
+  pane.querySelectorAll(".note-row").forEach(el => {
+    el.addEventListener("click", () => {
+      state.selectedId = el.dataset.id;
+      state.editing = false;
+      renderList();
+      renderDetail();
+      // mobile: hide list, show detail
+      if (window.innerWidth <= 760) {
+        $("#list-pane").classList.add("hidden");
+        $("#detail-pane").classList.remove("hidden");
+      }
+    });
+  });
+}
+
+function renderDetail() {
+  const pane = $("#detail-pane");
+  const note = state.notes.find(n => n.id === state.selectedId);
+  if (!note) {
+    pane.innerHTML = '<div class="detail-empty">Select a note from the list.</div>';
+    return;
+  }
+  if (state.editing) {
+    pane.innerHTML =
+      '<div class="detail-card editor">' +
+        '<button class="back-btn" id="back-btn" style="margin-bottom:10px">&larr; Back</button>' +
+        '<input class="title-input" id="ed-title" placeholder="Title">' +
+        '<textarea class="content-input" id="ed-content" placeholder="Content (passwords, info, anything)"></textarea>' +
+        '<div class="meta-row" style="margin-top:8px">' +
+          'Created ' + fmtDateLong(note.created) +
+          (note.updated !== note.created ? ' &middot; Updated ' + fmtDateLong(note.updated) : '') +
+        '</div>' +
+        '<div class="actions">' +
+          '<button class="primary" id="ed-save">Save</button>' +
+          '<button id="ed-cancel">Cancel</button>' +
+          '<button class="danger" id="ed-delete" style="margin-left:auto">Delete</button>' +
+        '</div>' +
+      '</div>';
+    $("#ed-title").value = note.title || "";
+    $("#ed-content").value = note.content || "";
+    $("#ed-save").addEventListener("click", saveEdit);
+    $("#ed-cancel").addEventListener("click", () => { state.editing = false; renderDetail(); });
+    $("#ed-delete").addEventListener("click", deleteCurrent);
+    const back = $("#back-btn");
+    if (back) back.addEventListener("click", showListOnMobile);
+    return;
+  }
+  const q = state.query;
+  let contentHtml = highlight(note.content || "(no content)", q);
+  contentHtml = maskPasswords(contentHtml);
+  pane.innerHTML =
+    '<div class="detail-card">' +
+      '<button class="back-btn" id="back-btn" style="margin-bottom:10px">&larr; Back</button>' +
+      '<h2>' + highlight(note.title || "(untitled)", q) + '</h2>' +
+      '<div class="meta-row">' +
+        'Updated ' + fmtDateLong(note.updated) +
+        ' &middot; Created ' + fmtDateLong(note.created) +
+      '</div>' +
+      '<pre class="content">' + contentHtml + '</pre>' +
+      '<div class="actions">' +
+        '<button class="primary" id="btn-edit">Edit</button>' +
+        '<button id="btn-copy">Copy content</button>' +
+        '<button class="danger" id="btn-delete" style="margin-left:auto">Delete</button>' +
+      '</div>' +
+    '</div>';
+  $("#btn-edit").addEventListener("click", () => { state.editing = true; renderDetail(); });
+  $("#btn-delete").addEventListener("click", deleteCurrent);
+  $("#btn-copy").addEventListener("click", () => {
+    navigator.clipboard.writeText(note.content || "").then(
+      () => showToast("Copied to clipboard"),
+      () => showToast("Copy failed")
+    );
+  });
+  const back = $("#back-btn");
+  if (back) back.addEventListener("click", showListOnMobile);
+  // Toggle password reveal on click
+  pane.querySelectorAll(".pw").forEach(el => {
+    el.addEventListener("click", () => el.classList.toggle("revealed"));
+  });
+}
+
+function showListOnMobile() {
+  if (window.innerWidth <= 760) {
+    $("#list-pane").classList.remove("hidden");
+    $("#detail-pane").classList.add("hidden");
+  }
+}
+
+// ============================================================================
+// CRUD
+// ============================================================================
+
+async function persist() {
+  if (!state.password) return;
+  const payload = await encryptPayload({ version: 1, notes: state.notes }, state.password);
+  saveEncrypted(payload);
+}
+
+async function saveEdit() {
+  const note = state.notes.find(n => n.id === state.selectedId);
+  if (!note) return;
+  note.title = $("#ed-title").value.trim();
+  note.content = $("#ed-content").value;
+  note.updated = nowIso();
+  state.editing = false;
+  await persist();
+  renderList();
+  renderDetail();
+  showToast("Saved");
+}
+
+async function deleteCurrent() {
+  const note = state.notes.find(n => n.id === state.selectedId);
+  if (!note) return;
+  if (!confirm('Delete "' + (note.title || "(untitled)") + '"? This cannot be undone.')) return;
+  state.notes = state.notes.filter(n => n.id !== state.selectedId);
+  state.selectedId = null;
+  state.editing = false;
+  await persist();
+  renderList();
+  renderDetail();
+  showToast("Deleted");
+}
+
+async function createNew() {
+  const note = {
+    id: newId(),
+    title: "New note",
+    content: "",
+    created: nowIso(),
+    updated: nowIso(),
+  };
+  state.notes.unshift(note);
+  state.selectedId = note.id;
+  state.editing = true;
+  await persist();
+  renderList();
+  renderDetail();
+  setTimeout(() => { const t = document.getElementById("ed-title"); if (t) { t.focus(); t.select(); } }, 50);
+}
+
+// ============================================================================
+// Lock / unlock / setup
+// ============================================================================
+
+function getBootstrapNotes() {
+  const tag = document.getElementById("bootstrap-data");
+  if (!tag) return null;
+  const raw = tag.textContent.trim();
+  if (!raw || raw === "__BOOTSTRAP_PLACEHOLDER__") return null;
+  try {
+    const data = JSON.parse(raw);
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.notes)) return data.notes;
+    return null;
+  } catch (e) {
+    console.warn("Bootstrap data not valid JSON", e);
+    return null;
+  }
+}
+
+function setupLockScreen() {
+  const existing = loadEncrypted();
+  const lockTitle = $("#lock-title");
+  const lockSub = $("#lock-sub");
+  const pw2Wrap = $("#pw2-wrap");
+  const submit = $("#lock-submit");
+  const err = $("#lock-err");
+  err.textContent = "";
+  if (existing) {
+    lockTitle.textContent = "Unlock your notebook";
+    lockSub.textContent = "Enter your master password to decrypt your notes.";
+    pw2Wrap.style.display = "none";
+    submit.textContent = "Unlock";
+    $("#lock").dataset.mode = "unlock";
+  } else {
+    lockTitle.textContent = "Set up your notebook vault";
+    const boot = getBootstrapNotes();
+    const count = boot ? boot.length : 0;
+    lockSub.textContent = count
+      ? "Pick a master password to encrypt your " + count + " notes. You’ll need it every time you open this file."
+      : "Pick a master password to start a fresh encrypted notebook.";
+    pw2Wrap.style.display = "";
+    submit.textContent = "Create vault";
+    $("#lock").dataset.mode = "setup";
+  }
+}
+
+async function handleLockSubmit(ev) {
+  ev.preventDefault();
+  const mode = $("#lock").dataset.mode;
+  const err = $("#lock-err");
+  err.textContent = "";
+  const pw1 = $("#pw1").value;
+  if (!pw1) { err.textContent = "Password required."; return; }
+  if (mode === "setup") {
+    const pw2 = $("#pw2").value;
+    if (pw1.length < 6) { err.textContent = "Use at least 6 characters."; return; }
+    if (pw1 !== pw2) { err.textContent = "Passwords don’t match."; return; }
+    err.textContent = "Encrypting…";
+    const boot = getBootstrapNotes() || [];
+    // Normalize incoming notes
+    const notes = boot.map((n, i) => ({
+      id: n.id || ("n" + (i + 1)),
+      title: n.title || "",
+      content: n.content || "",
+      created: n.created || nowIso(),
+      updated: n.updated || n.created || nowIso(),
+    }));
+    state.password = pw1;
+    state.notes = notes;
+    await persist();
+    enterApp();
+  } else {
+    const payload = loadEncrypted();
+    err.textContent = "Unlocking…";
+    try {
+      const data = await decryptPayload(payload, pw1);
+      const notes = (data && data.notes) || [];
+      state.password = pw1;
+      state.notes = notes;
+      enterApp();
+    } catch (e) {
+      err.textContent = "Wrong password.";
+      $("#pw1").select();
+    }
+  }
+}
+
+function enterApp() {
+  $("#lock").style.display = "none";
+  $("#app").style.display = "flex";
+  $("#pw1").value = "";
+  $("#pw2").value = "";
+  $("#lock-err").textContent = "";
+  // Pick a sensible initial selection
+  state.selectedId = null;
+  state.editing = false;
+  renderList();
+  renderDetail();
+  $("#search").focus();
+}
+
+function lockApp() {
+  state.password = null;
+  state.notes = [];
+  state.selectedId = null;
+  state.editing = false;
+  $("#app").style.display = "none";
+  $("#lock").style.display = "flex";
+  setupLockScreen();
+  $("#pw1").value = "";
+  $("#pw1").focus();
+}
+
+// ============================================================================
+// Evernote HTML parser (mirrors parse_notes.py used to bootstrap this vault)
+// ============================================================================
+
+function parseEvernoteDate(s) {
+  if (!s) return "";
+  const m = s.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+  if (!m) return s;
+  return `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z`;
+}
+
+// Walk a DOM subtree producing plain text with line breaks for block elements.
+function extractEvernoteText(root) {
+  const BLOCK = new Set(["P", "DIV", "H1", "H2", "H3", "H4", "H5", "H6",
+                         "LI", "TR", "PRE", "BLOCKQUOTE"]);
+  const SKIP = new Set(["STYLE", "SCRIPT", "ICONS", "SYMBOL", "SVG",
+                        "DEFS", "PATH", "NOTETITLE"]);
+  const out = [];
+  function walk(node) {
+    if (node.nodeType === Node.TEXT_NODE) { out.push(node.nodeValue); return; }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = node.tagName;
+    if (SKIP.has(tag)) return;
+    if (tag === "BR") { out.push("\n"); return; }
+    if (tag === "HR") return;
+    const isBlock = BLOCK.has(tag);
+    if (isBlock) out.push("\n");
+    for (const c of node.childNodes) walk(c);
+    if (isBlock) out.push("\n");
+  }
+  walk(root);
+  let text = out.join("");
+  text = text.replace(/[ \t\xa0]+/g, " ");
+  text = text.replace(/ *\n */g, "\n");
+  text = text.replace(/\n{3,}/g, "\n\n");
+  return text.trim();
+}
+
+// Parse one Evernote-export HTML string into [{title, created, updated, content}]
+function parseEvernoteHtml(htmlString) {
+  const doc = new DOMParser().parseFromString(htmlString, "text/html");
+  const enNote = doc.querySelector("en-note");
+  if (!enNote) return [];
+
+  const notes = [];
+  let cur = { title: "", created: "", updated: "", contentNodes: [] };
+  const tmp = doc.createElement("div");
+
+  const flush = () => {
+    if (!cur.title.trim()) {
+      cur = { title: "", created: "", updated: "", contentNodes: [] };
+      return;
+    }
+    tmp.innerHTML = "";
+    for (const n of cur.contentNodes) tmp.appendChild(n.cloneNode(true));
+    let content = extractEvernoteText(tmp);
+    const t = cur.title.trim();
+    if (t && content.toLowerCase().startsWith(t.toLowerCase())) {
+      content = content.slice(t.length).replace(/^[\n :\-]+/, "");
+    }
+    notes.push({
+      title: cur.title,
+      created: parseEvernoteDate(cur.created),
+      updated: parseEvernoteDate(cur.updated),
+      content,
+    });
+    cur = { title: "", created: "", updated: "", contentNodes: [] };
+  };
+
+  for (const child of enNote.childNodes) {
+    if (child.nodeType !== Node.ELEMENT_NODE) continue;
+    const tag = child.tagName.toLowerCase();
+    if (tag === "meta") {
+      const prop = child.getAttribute("itemprop") || "";
+      const val = child.getAttribute("content") || "";
+      if (prop === "title")        { flush(); cur.title = val; }
+      else if (prop === "created") { cur.created = val; }
+      else if (prop === "updated") { cur.updated = val; }
+    } else if (tag === "note-attributes") {
+      // ignore (author is stored here but we don't need it)
+    } else if (tag === "hr") {
+      flush();
+    } else if (tag === "icons" || tag === "style" || tag === "script") {
+      continue;
+    } else {
+      cur.contentNodes.push(child);
+    }
+  }
+  flush();
+  return notes;
+}
+
+async function importEvernoteHtml() {
+  const inp = $("#html-file-input");
+  inp.value = "";
+  inp.onchange = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    showToast(`Parsing ${files.length} file${files.length > 1 ? "s" : ""}…`);
+
+    const newNotes = [];
+    for (const file of files) {
+      try {
+        const text = await file.text();
+        const parsed = parseEvernoteHtml(text);
+        for (const n of parsed) newNotes.push(n);
+      } catch (err) {
+        console.error("Failed to parse", file.name, err);
+        showToast("Failed to parse " + file.name);
+      }
+    }
+
+    // Deduplicate against existing vault: skip if same title + created date already exists.
+    const seen = new Set(state.notes.map(n => (n.title || "") + "|" + (n.created || "")));
+    let added = 0, skipped = 0;
+    for (const n of newNotes) {
+      const key = (n.title || "") + "|" + (n.created || "");
+      if (seen.has(key)) { skipped++; continue; }
+      seen.add(key);
+      state.notes.push({
+        id: newId(),
+        title: n.title || "",
+        content: n.content || "",
+        created: n.created || nowIso(),
+        updated: n.updated || n.created || nowIso(),
+      });
+      added++;
+    }
+    await persist();
+    renderList();
+    renderDetail();
+    showToast(`Imported ${added} note${added === 1 ? "" : "s"}` +
+              (skipped ? ` (${skipped} duplicate${skipped === 1 ? "" : "s"} skipped)` : ""));
+  };
+  inp.click();
+}
+
+// ============================================================================
+// Export / import
+// ============================================================================
+
+function exportBackup() {
+  const payload = loadEncrypted();
+  if (!payload) { showToast("Nothing to export"); return; }
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const stamp = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = "notebook-vault-backup-" + stamp + ".json";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast("Backup downloaded");
+}
+
+function importBackup() {
+  const inp = $("#file-input");
+  inp.value = "";
+  inp.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      if (!payload || !payload.salt || !payload.iv || !payload.ct) {
+        showToast("Not a valid backup file");
+        return;
+      }
+      if (state.password) {
+        // We're unlocked: try with current password, fall back to prompt
+        try {
+          const data = await decryptPayload(payload, state.password);
+          if (confirm("Replace your current notes with " + (data.notes?.length || 0) + " notes from this backup?")) {
+            state.notes = data.notes || [];
+            await persist();
+            renderList();
+            renderDetail();
+            showToast("Imported " + state.notes.length + " notes");
+          }
+          return;
+        } catch (_) { /* fall through */ }
+      }
+      // Otherwise replace the stored encrypted blob and force user to unlock with its password
+      saveEncrypted(payload);
+      lockApp();
+      showToast("Backup loaded. Enter its password to unlock.");
+    } catch (err) {
+      showToast("Import failed: " + err.message);
+    }
+  };
+  inp.click();
+}
+
+async function changePassword() {
+  const old = $("#cp-old").value;
+  const n1 = $("#cp-new1").value;
+  const n2 = $("#cp-new2").value;
+  const err = $("#cp-err");
+  err.textContent = "";
+  if (old !== state.password) { err.textContent = "Current password is wrong."; return; }
+  if (!n1 || n1.length < 6) { err.textContent = "New password must be at least 6 characters."; return; }
+  if (n1 !== n2) { err.textContent = "New passwords don’t match."; return; }
+  state.password = n1;
+  await persist();
+  $("#change-pw-modal").classList.remove("open");
+  $("#cp-old").value = $("#cp-new1").value = $("#cp-new2").value = "";
+  showToast("Password changed");
+}
+
+// ============================================================================
+// Wire up
+// ============================================================================
+
+document.addEventListener("DOMContentLoaded", () => {
+  setupLockScreen();
+
+  $("#lock-form").addEventListener("submit", handleLockSubmit);
+  $("#lock-import").addEventListener("click", importBackup);
+
+  // "Forgot password?" → reset modal
+  const resetModal = $("#reset-modal");
+  const openResetModal = (ev) => {
+    if (ev) ev.preventDefault();
+    // Show bundled note count for context
+    const boot = getBootstrapNotes();
+    $("#reset-count").textContent = boot ? boot.length.toLocaleString() : "0";
+    $("#reset-email").value = "";
+    $("#reset-err").textContent = "";
+    resetModal.classList.add("open");
+    setTimeout(() => $("#reset-email").focus(), 50);
+  };
+  const closeResetModal = () => {
+    resetModal.classList.remove("open");
+    $("#reset-email").value = "";
+    $("#reset-err").textContent = "";
+  };
+  $("#lock-forgot").addEventListener("click", openResetModal);
+  $("#reset-cancel").addEventListener("click", closeResetModal);
+  $("#reset-confirm").addEventListener("click", () => {
+    const typed = ($("#reset-email").value || "").trim().toLowerCase();
+    const err = $("#reset-err");
+    if (!typed) { err.textContent = "Enter your recovery email."; return; }
+    if (typed !== RECOVERY_EMAIL.toLowerCase()) {
+      err.textContent = "That doesn't match the recovery email on file.";
+      return;
+    }
+    // Confirmed — wipe the encrypted vault and re-show the setup screen.
+    clearEncrypted();
+    closeResetModal();
+    state.password = null;
+    state.notes = [];
+    state.selectedId = null;
+    state.editing = false;
+    setupLockScreen();
+    $("#pw1").value = "";
+    $("#pw1").focus();
+    showToast("Vault reset. Choose a new master password.");
+  });
+  $("#reset-email").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); $("#reset-confirm").click(); }
+  });
+
+  $("#search").addEventListener("input", (e) => {
+    state.query = e.target.value;
+    renderList();
+    renderDetail();
+  });
+  $("#sort").addEventListener("change", (e) => {
+    state.sort = e.target.value;
+    renderList();
+  });
+  $("#new-note").addEventListener("click", createNew);
+
+  const menuBtn = $("#menu-btn");
+  const menuPop = $("#menu-pop");
+  menuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    menuPop.classList.toggle("open");
+  });
+  document.addEventListener("click", () => menuPop.classList.remove("open"));
+  $("#menu-export").addEventListener("click", () => { menuPop.classList.remove("open"); exportBackup(); });
+  $("#menu-import").addEventListener("click", () => { menuPop.classList.remove("open"); importBackup(); });
+  $("#menu-import-html").addEventListener("click", () => { menuPop.classList.remove("open"); importEvernoteHtml(); });
+  $("#menu-lock").addEventListener("click", () => { menuPop.classList.remove("open"); lockApp(); });
+  $("#menu-change-pw").addEventListener("click", () => {
+    menuPop.classList.remove("open");
+    $("#change-pw-modal").classList.add("open");
+    setTimeout(() => $("#cp-old").focus(), 50);
+  });
+
+  $("#cp-cancel").addEventListener("click", () => {
+    $("#change-pw-modal").classList.remove("open");
+    $("#cp-old").value = $("#cp-new1").value = $("#cp-new2").value = "";
+    $("#cp-err").textContent = "";
+  });
+  $("#cp-save").addEventListener("click", changePassword);
+
+  // Keyboard shortcuts
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+      if ($("#app").style.display !== "none") {
+        e.preventDefault();
+        $("#search").focus();
+      }
+    }
+    if (e.key === "Escape") {
+      if ($("#reset-modal").classList.contains("open")) {
+        $("#reset-modal").classList.remove("open");
+      } else if ($("#change-pw-modal").classList.contains("open")) {
+        $("#change-pw-modal").classList.remove("open");
+      } else if (state.editing) {
+        state.editing = false;
+        renderDetail();
+      }
+    }
+  });
+
+  // Auto-lock after 15 minutes of inactivity
+  let idleTimer = null;
+  const resetIdle = () => {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => {
+      if (state.password) { lockApp(); showToast("Auto-locked"); }
+    }, 15 * 60 * 1000);
+  };
+  ["mousemove", "keydown", "click"].forEach(ev => document.addEventListener(ev, resetIdle, { passive: true }));
+  resetIdle();
+});
+</script>
+</body>
+</html>
