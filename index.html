@@ -399,9 +399,12 @@
   </div>
 </div>
 
-<!-- File-input hidden (re-used for both backup imports and Evernote HTML imports) -->
-<input type="file" id="file-input" style="display:none">
-<input type="file" id="html-file-input" accept=".html,.htm,text/html" multiple style="display:none">
+<!-- File inputs: visually hidden but NOT display:none, because Chrome blocks
+     programmatic .click() on display:none inputs. -->
+<input type="file" id="file-input" accept="application/json,.json"
+       style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none">
+<input type="file" id="html-file-input" accept=".html,.htm,text/html" multiple
+       style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none">
 
 <div class="toast" id="toast"></div>
 
