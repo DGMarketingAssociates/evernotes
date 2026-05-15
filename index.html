@@ -55,7 +55,19 @@
     padding: 7px 12px;
     transition: background 0.1s, border-color 0.1s;
   }
-  button:hover { background: var(--panel-2); border-color: var(--accent); }
+  button:hover, label.btn:hover { background: var(--panel-2); border-color: var(--accent); }
+  label.btn {
+    display: inline-block;
+    cursor: pointer;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 7px 12px;
+    transition: background 0.1s, border-color 0.1s;
+    text-align: center;
+    user-select: none;
+    line-height: 1.4;
+  }
   button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
   button.danger { color: var(--danger); }
@@ -229,15 +241,20 @@
     display: none;
   }
   .menu-pop.open { display: block; }
-  .menu-pop button {
+  .menu-pop button, .menu-pop .menu-label {
     width: 100%;
+    box-sizing: border-box;
+    display: block;
     text-align: left;
     border: none;
     border-radius: 0;
     background: transparent;
     padding: 9px 14px;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
   }
-  .menu-pop button:hover { background: var(--panel-2); }
+  .menu-pop button:hover, .menu-pop .menu-label:hover { background: var(--panel-2); }
   .menu-pop .divider { height: 1px; background: var(--border); margin: 2px 0; }
 
   /* Mobile */
@@ -312,7 +329,7 @@
       <div class="actions">
         <button type="submit" class="primary" id="lock-submit">Unlock</button>
         <span class="spacer"></span>
-        <button type="button" id="lock-import">Restore from backup&hellip;</button>
+        <label class="btn" for="backup-file-input">Restore from backup&hellip;</label>
       </div>
       <div class="hint" id="forgot-wrap" style="margin-top:4px;text-align:right">
         <a href="#" id="lock-forgot" style="color:var(--accent);text-decoration:none">Forgot password?</a>
@@ -362,9 +379,9 @@
       <button id="menu-btn">&#9776;</button>
       <div class="menu-pop" id="menu-pop">
         <button id="menu-export">Export encrypted backup</button>
-        <button id="menu-import">Import backup&hellip;</button>
+        <label for="backup-file-input" id="menu-import" class="menu-label">Import backup&hellip;</label>
         <div class="divider"></div>
-        <button id="menu-import-html">Import Evernote HTML&hellip;</button>
+        <label for="html-files-input" id="menu-import-html" class="menu-label">Import Evernote HTML&hellip;</label>
         <div class="divider"></div>
         <button id="menu-change-pw">Change master password&hellip;</button>
         <div class="divider"></div>
@@ -399,7 +416,11 @@
   </div>
 </div>
 
-<!-- File pickers are created on-demand by pickFile() — no static elements needed. -->
+<!-- Static, label-triggered file inputs. Hidden via display:none — that's fine
+     when triggered through a <label for="..."> because the click is a real
+     user gesture, not a programmatic .click() call. -->
+<input type="file" id="backup-file-input" accept="application/json,.json" style="display:none">
+<input type="file" id="html-files-input" accept=".html,.htm,text/html" multiple style="display:none">
 
 <div class="toast" id="toast"></div>
 
@@ -490,7 +511,7 @@ async function decryptPayload(payload, password) {
 // Storage
 // ============================================================================
 
-const LS_KEY = "notebook-vault.v5";
+const LS_KEY = "notebook-vault.v6";
 const RECOVERY_EMAIL = "sergio@melicio.com";
 // Best-effort cleanup of older blobs so they don't sit orphaned.
 try { localStorage.removeItem("notebook-vault.v1"); } catch (_) {}
@@ -1004,10 +1025,10 @@ function parseEvernoteHtml(htmlString) {
   return notes;
 }
 
-async function importEvernoteHtml() {
-  const files = await pickFile({ accept: ".html,.htm,text/html", multiple: true });
+async function importEvernoteHtml(files) {
+  files = Array.from(files || []);
   if (!files.length) return;
-  await (async (files) => {
+  {
     showToast(`Parsing ${files.length} file${files.length > 1 ? "s" : ""}…`);
 
     const newNotes = [];
@@ -1043,7 +1064,7 @@ async function importEvernoteHtml() {
     renderDetail();
     showToast(`Imported ${added} note${added === 1 ? "" : "s"}` +
               (skipped ? ` (${skipped} duplicate${skipped === 1 ? "" : "s"} skipped)` : ""));
-  })(files);
+  }
 }
 
 // ============================================================================
@@ -1066,49 +1087,11 @@ function exportBackup() {
   showToast("Backup downloaded");
 }
 
-// Open a file picker by creating a fresh <input type="file"> each call.
-// Some browsers refuse to open the picker for inputs that are display:none
-// or have pointer-events:none, so we build a visible-but-offscreen input,
-// click it inside the same user gesture, and remove it on change/cancel.
-function pickFile({ accept = "", multiple = false } = {}) {
-  return new Promise((resolve) => {
-    const inp = document.createElement("input");
-    inp.type = "file";
-    if (accept) inp.accept = accept;
-    if (multiple) inp.multiple = true;
-    inp.style.cssText = "position:fixed;left:-1000px;top:0;width:1px;height:1px;opacity:0";
-    let done = false;
-    const cleanup = () => {
-      if (done) return;
-      done = true;
-      window.removeEventListener("focus", onFocus);
-      if (inp.parentNode) inp.parentNode.removeChild(inp);
-    };
-    inp.addEventListener("change", () => {
-      const files = Array.from(inp.files || []);
-      cleanup();
-      resolve(files);
-    });
-    // If user cancels the dialog, "change" never fires. Detect cancel by
-    // listening for window focus returning after the dialog closes.
-    const onFocus = () => {
-      setTimeout(() => {
-        if (!done && (!inp.files || inp.files.length === 0)) {
-          cleanup();
-          resolve([]);
-        }
-      }, 300);
-    };
-    window.addEventListener("focus", onFocus, { once: false });
-    document.body.appendChild(inp);
-    inp.click();
-  });
-}
+// File pickers are triggered by <label for="..."> clicks on the static inputs.
+// Each input's change event passes the picked file(s) to the handler below.
 
-async function importBackup() {
-  const files = await pickFile({ accept: "application/json,.json" });
-  if (!files.length) return;
-  const file = files[0];
+async function importBackup(file) {
+  if (!file) return;
   try {
     const text = await file.text();
     const payload = JSON.parse(text);
@@ -1163,7 +1146,19 @@ document.addEventListener("DOMContentLoaded", () => {
   setupLockScreen();
 
   $("#lock-form").addEventListener("submit", handleLockSubmit);
-  $("#lock-import").addEventListener("click", importBackup);
+
+  // File inputs are triggered by their <label for="..."> elements throughout
+  // the UI. We just listen for the change event here and dispatch.
+  $("#backup-file-input").addEventListener("change", async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";  // allow re-selecting same file later
+    if (file) await importBackup(file);
+  });
+  $("#html-files-input").addEventListener("change", async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (files.length) await importEvernoteHtml(files);
+  });
 
   // "Forgot password?" → reset modal
   const resetModal = $("#reset-modal");
@@ -1227,8 +1222,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   document.addEventListener("click", () => menuPop.classList.remove("open"));
   $("#menu-export").addEventListener("click", () => { menuPop.classList.remove("open"); exportBackup(); });
-  $("#menu-import").addEventListener("click", () => { menuPop.classList.remove("open"); importBackup(); });
-  $("#menu-import-html").addEventListener("click", () => { menuPop.classList.remove("open"); importEvernoteHtml(); });
+  // Menu labels for file imports — labels open the picker natively; we just
+  // close the menu when they're clicked.
+  $("#menu-import").addEventListener("click", () => menuPop.classList.remove("open"));
+  $("#menu-import-html").addEventListener("click", () => menuPop.classList.remove("open"));
   $("#menu-lock").addEventListener("click", () => { menuPop.classList.remove("open"); lockApp(); });
   $("#menu-change-pw").addEventListener("click", () => {
     menuPop.classList.remove("open");
