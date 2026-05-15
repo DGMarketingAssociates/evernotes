@@ -399,12 +399,7 @@
   </div>
 </div>
 
-<!-- File inputs: visually hidden but NOT display:none, because Chrome blocks
-     programmatic .click() on display:none inputs. -->
-<input type="file" id="file-input" accept="application/json,.json"
-       style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none">
-<input type="file" id="html-file-input" accept=".html,.htm,text/html" multiple
-       style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;opacity:0;pointer-events:none">
+<!-- File pickers are created on-demand by pickFile() — no static elements needed. -->
 
 <div class="toast" id="toast"></div>
 
@@ -495,12 +490,13 @@ async function decryptPayload(payload, password) {
 // Storage
 // ============================================================================
 
-const LS_KEY = "notebook-vault.v4";
+const LS_KEY = "notebook-vault.v5";
 const RECOVERY_EMAIL = "sergio@melicio.com";
 // Best-effort cleanup of older blobs so they don't sit orphaned.
 try { localStorage.removeItem("notebook-vault.v1"); } catch (_) {}
 try { localStorage.removeItem("notebook-vault.v2"); } catch (_) {}
 try { localStorage.removeItem("notebook-vault.v3"); } catch (_) {}
+try { localStorage.removeItem("notebook-vault.v4"); } catch (_) {}
 
 function loadEncrypted() {
   try {
@@ -1009,11 +1005,9 @@ function parseEvernoteHtml(htmlString) {
 }
 
 async function importEvernoteHtml() {
-  const inp = $("#html-file-input");
-  inp.value = "";
-  inp.onchange = async (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+  const files = await pickFile({ accept: ".html,.htm,text/html", multiple: true });
+  if (!files.length) return;
+  await (async (files) => {
     showToast(`Parsing ${files.length} file${files.length > 1 ? "s" : ""}…`);
 
     const newNotes = [];
@@ -1049,8 +1043,7 @@ async function importEvernoteHtml() {
     renderDetail();
     showToast(`Imported ${added} note${added === 1 ? "" : "s"}` +
               (skipped ? ` (${skipped} duplicate${skipped === 1 ? "" : "s"} skipped)` : ""));
-  };
-  inp.click();
+  })(files);
 }
 
 // ============================================================================
@@ -1073,42 +1066,77 @@ function exportBackup() {
   showToast("Backup downloaded");
 }
 
-function importBackup() {
-  const inp = $("#file-input");
-  inp.value = "";
-  inp.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const payload = JSON.parse(text);
-      if (!payload || !payload.salt || !payload.iv || !payload.ct) {
-        showToast("Not a valid backup file");
-        return;
-      }
-      if (state.password) {
-        // We're unlocked: try with current password, fall back to prompt
-        try {
-          const data = await decryptPayload(payload, state.password);
-          if (confirm("Replace your current notes with " + (data.notes?.length || 0) + " notes from this backup?")) {
-            state.notes = data.notes || [];
-            await persist();
-            renderList();
-            renderDetail();
-            showToast("Imported " + state.notes.length + " notes");
-          }
-          return;
-        } catch (_) { /* fall through */ }
-      }
-      // Otherwise replace the stored encrypted blob and force user to unlock with its password
-      saveEncrypted(payload);
-      lockApp();
-      showToast("Backup loaded. Enter its password to unlock.");
-    } catch (err) {
-      showToast("Import failed: " + err.message);
+// Open a file picker by creating a fresh <input type="file"> each call.
+// Some browsers refuse to open the picker for inputs that are display:none
+// or have pointer-events:none, so we build a visible-but-offscreen input,
+// click it inside the same user gesture, and remove it on change/cancel.
+function pickFile({ accept = "", multiple = false } = {}) {
+  return new Promise((resolve) => {
+    const inp = document.createElement("input");
+    inp.type = "file";
+    if (accept) inp.accept = accept;
+    if (multiple) inp.multiple = true;
+    inp.style.cssText = "position:fixed;left:-1000px;top:0;width:1px;height:1px;opacity:0";
+    let done = false;
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("focus", onFocus);
+      if (inp.parentNode) inp.parentNode.removeChild(inp);
+    };
+    inp.addEventListener("change", () => {
+      const files = Array.from(inp.files || []);
+      cleanup();
+      resolve(files);
+    });
+    // If user cancels the dialog, "change" never fires. Detect cancel by
+    // listening for window focus returning after the dialog closes.
+    const onFocus = () => {
+      setTimeout(() => {
+        if (!done && (!inp.files || inp.files.length === 0)) {
+          cleanup();
+          resolve([]);
+        }
+      }, 300);
+    };
+    window.addEventListener("focus", onFocus, { once: false });
+    document.body.appendChild(inp);
+    inp.click();
+  });
+}
+
+async function importBackup() {
+  const files = await pickFile({ accept: "application/json,.json" });
+  if (!files.length) return;
+  const file = files[0];
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    if (!payload || !payload.salt || !payload.iv || !payload.ct) {
+      showToast("Not a valid backup file");
+      return;
     }
-  };
-  inp.click();
+    if (state.password) {
+      // We're unlocked: try with current password, fall back to prompt
+      try {
+        const data = await decryptPayload(payload, state.password);
+        if (confirm("Replace your current notes with " + (data.notes?.length || 0) + " notes from this backup?")) {
+          state.notes = data.notes || [];
+          await persist();
+          renderList();
+          renderDetail();
+          showToast("Imported " + state.notes.length + " notes");
+        }
+        return;
+      } catch (_) { /* fall through */ }
+    }
+    // Otherwise replace the stored encrypted blob and force user to unlock with its password
+    saveEncrypted(payload);
+    lockApp();
+    showToast("Backup loaded. Enter its password to unlock.");
+  } catch (err) {
+    showToast("Import failed: " + err.message);
+  }
 }
 
 async function changePassword() {
